@@ -11,13 +11,13 @@ Adafruit_LSM303_Accel_Unified accel = Adafruit_LSM303_Accel_Unified(54321);
 //char dimensions[3] = {'x', 'y', 'z'};
 
 int historyIndex = 0;
-float accX[5] = {0, 0, 0, 0, 0};
-float accY[5] = {0, 0, 0, 0, 0};
-float accZ[5] = {0, 0, 0, 0, 0};
+float accX[4] = {0, 0, 0, 0};
+float accY[4] = {0, 0, 0, 0};
+float accZ[4] = {0, 0, 0, 0};
 
-float accPrevX[5] = {0, 0, 0, 0, 0};
-float accPrevY[5] = {0, 0, 0, 0, 0};
-float accPrevZ[5] = {0, 0, 0, 0, 0};
+float accPrevX[4] = {0, 0, 0, 0};
+float accPrevY[4] = {0, 0, 0, 0};
+float accPrevZ[4] = {0, 0, 0, 0};
 float accThreshold = 10;
 float yThreshold = 4;
 
@@ -102,19 +102,19 @@ void loop(void)
   accY[historyIndex] = accEvent.acceleration.y;
   accZ[historyIndex] = accEvent.acceleration.z;
 
-  if (historyIndex <  3) historyIndex++;
+  if (historyIndex <  2) historyIndex++;
   // Run every time the arrays have been filled
   else {
     String json = ""; // String that will contain json data for later trandsport over bluetooth
     historyIndex = 0; // Reset history index
 
-    float xPrevAvg = arrayAverage(accPrevX, 5);
-    float yPrevAvg = arrayAverage(accPrevY, 5);
-    float zPrevAvg = arrayAverage(accPrevZ, 5);
+    float xPrevAvg = arrayAverage(accPrevX, 4);
+    float yPrevAvg = arrayAverage(accPrevY, 4);
+    float zPrevAvg = arrayAverage(accPrevZ, 4);
 
-    float xAvg = arrayAverage(accX, 5);
-    float yAvg = arrayAverage(accY, 5);
-    float zAvg = arrayAverage(accZ, 5);
+    float xAvg = arrayAverage(accX, 4);
+    float yAvg = arrayAverage(accY, 4);
+    float zAvg = arrayAverage(accZ, 4);
 
     //Detect a forward (Y) Motion when the sensor is upright
     if (yAvg > yThreshold && zAvg > 9) {
@@ -147,14 +147,14 @@ void loop(void)
         //        Serial.print("Movement Time: ");
         //        Serial.println(yMovementIndex);
 
-        if (yMovementIndex < 5 && yMovAvg > 0.5 && yMovAvg < 10) {
+        if (yMovementIndex < 4 && yMovAvg > 0.5 && yMovAvg < 9) {
 //          Serial.println("DAB");
           json += "action: \"dab\",";
         }
 //        if (yMovementIndex < 5 && yMovAvg > 0.5) {
 //          Serial.println("ALMOST BUT ur ymovAvg is too high");
 //        }
-        else if (yMovementIndex >= 3 && yMovAvg > 10) {
+        else if (yMovementIndex >= 3 && yMovAvg >= 9) {
 //          Serial.println("PUNCH");
           json += "action: \"punch\" ,";
         }
@@ -171,7 +171,7 @@ void loop(void)
 
 
     //Detect Non graviational movement
-    float nonGravAcc = (max((abs(xAvg) +  abs(yAvg) + abs(zAvg)) - 15.5, 0)); //Just a half-assed not very scientific formula I came up with that mostly removes gravity
+    float nonGravAcc = (max((abs(xAvg) +  abs(yAvg) + abs(zAvg)) - 14, 0)); //Just a half-assed not very scientific formula I came up with that mostly removes gravity
     if (nonGravAcc != 0 && !yMovementBegun) {
 //      Serial.println(nonGravAcc);
 
