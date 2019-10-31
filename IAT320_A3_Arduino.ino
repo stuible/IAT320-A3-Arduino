@@ -4,27 +4,28 @@
 #include <SoftwareSerial.h>
 SoftwareSerial BTserial(0, 1); // RX | TX
 
-Adafruit_LSM303_Mag_Unified mag = Adafruit_LSM303_Mag_Unified(12345);
-
+// Taken From Adafruit LSM303DLHC Acceleromter Example Code
 Adafruit_LSM303_Accel_Unified accel = Adafruit_LSM303_Accel_Unified(54321);
 
-//char dimensions[3] = {'x', 'y', 'z'};
-
+//Index and arrays to store historical acc. data
 int historyIndex = 0;
 float accX[4] = {0, 0, 0, 0};
 float accY[4] = {0, 0, 0, 0};
 float accZ[4] = {0, 0, 0, 0};
 
+//Index and arrays to store previous historical acc. data for comparison
 float accPrevX[4] = {0, 0, 0, 0};
 float accPrevY[4] = {0, 0, 0, 0};
 float accPrevZ[4] = {0, 0, 0, 0};
 float accThreshold = 10;
 float yThreshold = 4;
 
+//Index and arrays to store Y data for gestures
 int yMovementIndex = 0;
 bool yMovementBegun = false;
 float moveY[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
+//Index and arrays to store general movement data
 int generalMovementIndex = 0;
 int generalMovementBegun = false;
 float moveGeneral[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
@@ -41,17 +42,6 @@ void setup(void)
   BTserial.begin(9600);
   Serial.println("Begin"); Serial.println("");
 
-  /* Enable auto-gain */
-  mag.enableAutoRange(true);
-
-  /* Initialise the sensor */
-  if (!mag.begin())
-  {
-    /* There was a problem detecting the LSM303 ... check your connections */
-    Serial.println("Ooops, no LSM303 Magnometer detected ... Check your wiring!");
-    while (1);
-  }
-
   if (!accel.begin())
   {
     /* There was a problem detecting the LSM303 ... check your connections */
@@ -67,18 +57,11 @@ void setup(void)
 void loop(void)
 {
   /* Get a new sensor event */
-  sensors_event_t magEvent;
-  mag.getEvent(&magEvent);
-
   sensors_event_t accEvent;
   accel.getEvent(&accEvent);
 
+  //Create raw debug JSON acc data
   String raw = (String)"{" +
-               "mag:{" +
-               "x:" + magEvent.magnetic.x + "," +
-               "y:" + magEvent.magnetic.y + "," +
-               "z:" + magEvent.magnetic.z +
-               + "}," +
                "acc:{" +
                "x:" + accEvent.acceleration.x + "," +
                "y:" + accEvent.acceleration.y + "," +
@@ -88,9 +71,6 @@ void loop(void)
 
 
 //      Serial.print(raw);
-  //  if (accEvent.acceleration.y > 10) Serial.println(accEvent.acceleration.y);
-
-  //  Serial.println("Abotu to do the thing");
 
   // Transfer current current data into another array so it can be compared after the current array once full
   accPrevX[historyIndex] = accX[historyIndex];
@@ -102,6 +82,7 @@ void loop(void)
   accY[historyIndex] = accEvent.acceleration.y;
   accZ[historyIndex] = accEvent.acceleration.z;
 
+  // If array is not yet full, incremement history index and carry  on
   if (historyIndex <  2) historyIndex++;
   // Run every time the arrays have been filled
   else {
@@ -116,14 +97,16 @@ void loop(void)
     float yAvg = arrayAverage(accY, 4);
     float zAvg = arrayAverage(accZ, 4);
 
-    //Detect a forward (Y) Motion when the sensor is upright
+    //Detect a forward (Y) Motion when the sensor is upright (ish)
     if (yAvg > yThreshold && zAvg > 9) {
+      //Movement has begun
       if (!yMovementBegun) {
         yMovementBegun = true;
         moveY[yMovementIndex] = yAvg;
         yMovementIndex++;
         Serial.println("Begin Y Movement");
       }
+      //Movement is happening
       else {
         Serial.println("----- Y Movement");
         if (yMovementIndex < 5) moveY[yMovementIndex] = yAvg;
@@ -131,6 +114,7 @@ void loop(void)
       }
     }
     else  {
+      //Movement is Finished
       if (yMovementBegun) {
         Serial.println("Done Y Movement");
         
@@ -147,15 +131,12 @@ void loop(void)
         //        Serial.print("Movement Time: ");
         //        Serial.println(yMovementIndex);
 
+        // Dab detection
         if (yMovementIndex < 4 && yMovAvg > 0.5 && yMovAvg < 9) {
-//          Serial.println("DAB");
           json += "action: \"dab\",";
         }
-//        if (yMovementIndex < 5 && yMovAvg > 0.5) {
-//          Serial.println("ALMOST BUT ur ymovAvg is too high");
-//        }
+        // Punch Detection
         else if (yMovementIndex >= 3 && yMovAvg >= 9) {
-//          Serial.println("PUNCH");
           json += "action: \"punch\" ,";
         }
 
@@ -170,12 +151,16 @@ void loop(void)
     }
 
 
-    //Detect Non graviational movement
-    float nonGravAcc = (max((abs(xAvg) +  abs(yAvg) + abs(zAvg)) - 14, 0)); //Just a half-assed not very scientific formula I came up with that mostly removes gravity
+    /* Detect Non Graviational Movement:
+
+    Just a half-assed, not very scientific formula I came up with that mostly removes 
+    gravity and only shows additional motion (in any direction).
+    */
+    float nonGravAcc = (max((abs(xAvg) +  abs(yAvg) + abs(zAvg)) - 14, 0)); 
     if (nonGravAcc != 0 && !yMovementBegun) {
 //      Serial.println(nonGravAcc);
 
-      // If the last movement was within a second of this one AND our array isn't full
+      // If the last movement was within a second of this one AND our array isn't full then the movement is a continuation of the last
       if (millis() - generalMovementLastMillis < 1000) {
 //        Serial.println("Related movement");
 
@@ -184,6 +169,7 @@ void loop(void)
         generalMovementIndex++;
       }
       else {
+          // This movement is unrelated to the last one
 //        Serial.println("UnRelated movement");
       }
 
@@ -213,44 +199,10 @@ void loop(void)
       sentGeneralMovement = true;
     }
 
-    //    if (xAvg - xPrevAvg > 5){ json += "acc:{qmove: ['x']}"; Serial.println("Moved X Quickly!"); }
-    //    if (yAvg - yPrevAvg > 5) Serial.println("Moved Y Quickly!");
-    //    if (zAvg - zPrevAvg > 2){ json += "acc:{qmove: ['z']}"; Serial.println("Moved Up Quickly!"); }
-    //    else { json += "acc:{qmove: ['none']}"; Serial.println("Stayed Still"); }
-    //    if(xAvg - xPrevAvg < 5 && yAvg - yPrevAvg < 5 && zAvg - zPrevAvg < 2){ json += "acc:{qmove: ['none']}"; Serial.println("Stayed Still"); }
-
-    //        json += (String)"mag:{" +
-    //                      "x:" + magEvent.magnetic.x + "," +
-    //                      "y:" + magEvent.magnetic.y + "," +
-    //                      "z:" + magEvent.magnetic.z +
-    //                      + "}," +
-    //                      "acc:{" +
-    //                      "x:" + accEvent.acceleration.x + "," +
-    //                      "y:" + accEvent.acceleration.y + "," +
-    //                      "z:" + accEvent.acceleration.z +
-    //                      + "}";
     if (json.length() != 0) Serial.print("{" + json + "}\n");
 
     if (json.length() != 0) BTserial.print("{" + json + "}\n");
   }
-
-
-
-  //  //Right Way Up Detector
-  //  if (zAvg > 8 && yAvg < 5 && xAvg < 5) Serial.println("Right Way Up");
-  //  else Serial.println("Wrong Way!");
-
-
-  //  Serial.println(arrayAverage(accZ, 10));
-
-  //  if(accEvent.acceleration.x > accThreshold) {Serial.print("x: "); Serial.println(accEvent.acceleration.x); }
-  //  if(accEvent.acceleration.y > accThreshold) {Serial.print("y: "); Serial.println(accEvent.acceleration.y); }
-  //  if(accEvent.acceleration.z > accThreshold) {Serial.print("z: "); Serial.println(accEvent.acceleration.z); }
-
-
-  //  for (int i = 0; i < sizeof(dimensions); i++) {
-  //
-  //  }
 
   //  delay(50)
 }
