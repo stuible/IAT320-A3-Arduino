@@ -11,16 +11,15 @@ Adafruit_LSM303_Accel_Unified accel = Adafruit_LSM303_Accel_Unified(54321);
 //char dimensions[3] = {'x', 'y', 'z'};
 
 int historyIndex = 0;
-float accX[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-float accY[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-float accZ[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+float accX[5] = {0, 0, 0, 0, 0};
+float accY[5] = {0, 0, 0, 0, 0};
+float accZ[5] = {0, 0, 0, 0, 0};
 
-float accPrevX[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-float accPrevY[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-float accPrevZ[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-
+float accPrevX[5] = {0, 0, 0, 0, 0};
+float accPrevY[5] = {0, 0, 0, 0, 0};
+float accPrevZ[5] = {0, 0, 0, 0, 0};
 float accThreshold = 10;
-float yThreshold = 0.5;
+float yThreshold = 4;
 
 int yMovementIndex = 0;
 bool yMovementBegun = false;
@@ -88,7 +87,7 @@ void loop(void)
                + "}\n";
 
 
-  //    Serial.print(raw);
+//      Serial.print(raw);
   //  if (accEvent.acceleration.y > 10) Serial.println(accEvent.acceleration.y);
 
   //  Serial.println("Abotu to do the thing");
@@ -103,22 +102,22 @@ void loop(void)
   accY[historyIndex] = accEvent.acceleration.y;
   accZ[historyIndex] = accEvent.acceleration.z;
 
-  if (historyIndex <  8) historyIndex++;
+  if (historyIndex <  3) historyIndex++;
   // Run every time the arrays have been filled
   else {
     String json = ""; // String that will contain json data for later trandsport over bluetooth
     historyIndex = 0; // Reset history index
 
-    float xPrevAvg = arrayAverage(accPrevX, 10);
-    float yPrevAvg = arrayAverage(accPrevY, 10);
-    float zPrevAvg = arrayAverage(accPrevZ, 10);
+    float xPrevAvg = arrayAverage(accPrevX, 5);
+    float yPrevAvg = arrayAverage(accPrevY, 5);
+    float zPrevAvg = arrayAverage(accPrevZ, 5);
 
-    float xAvg = arrayAverage(accX, 10);
-    float yAvg = arrayAverage(accY, 10);
-    float zAvg = arrayAverage(accZ, 10);
+    float xAvg = arrayAverage(accX, 5);
+    float yAvg = arrayAverage(accY, 5);
+    float zAvg = arrayAverage(accZ, 5);
 
     //Detect a forward (Y) Motion when the sensor is upright
-    if (yAvg > yThreshold && zAvg > 7) {
+    if (yAvg > yThreshold && zAvg > 9) {
       if (!yMovementBegun) {
         yMovementBegun = true;
         moveY[yMovementIndex] = yAvg;
@@ -127,15 +126,18 @@ void loop(void)
       }
       else {
         Serial.println("----- Y Movement");
-        if (yMovementIndex < 10) moveY[yMovementIndex] = yAvg;
+        if (yMovementIndex < 5) moveY[yMovementIndex] = yAvg;
         yMovementIndex++;
       }
     }
     else  {
       if (yMovementBegun) {
         Serial.println("Done Y Movement");
+        
+        float yMovAvg = arrayAverageNoZeros(moveY, 5);
 
-        float yMovAvg = arrayAverageNoZeros(moveY, 10);
+        Serial.print("yMovAvg: "); Serial.println(yMovAvg);
+        Serial.print("yMovementIndex: "); Serial.println(yMovementIndex);
 
         //On Average, the force of the movement
         //        Serial.print("Avg Movement Force: ");
@@ -145,11 +147,14 @@ void loop(void)
         //        Serial.print("Movement Time: ");
         //        Serial.println(yMovementIndex);
 
-        if (yMovementIndex < 3 && yMovAvg > 0.5) {
+        if (yMovementIndex < 5 && yMovAvg > 0.5 && yMovAvg < 10) {
 //          Serial.println("DAB");
           json += "action: \"dab\",";
         }
-        else if (yMovementIndex > 3 && yMovAvg > 3) {
+//        if (yMovementIndex < 5 && yMovAvg > 0.5) {
+//          Serial.println("ALMOST BUT ur ymovAvg is too high");
+//        }
+        else if (yMovementIndex >= 3 && yMovAvg > 10) {
 //          Serial.println("PUNCH");
           json += "action: \"punch\" ,";
         }
@@ -160,25 +165,26 @@ void loop(void)
         }
         yMovementIndex = 0;
       }
+//      else Serial.println("Movement was below threshold");
       yMovementBegun = false;
     }
 
 
     //Detect Non graviational movement
     float nonGravAcc = (max((abs(xAvg) +  abs(yAvg) + abs(zAvg)) - 15.5, 0)); //Just a half-assed not very scientific formula I came up with that mostly removes gravity
-    if (nonGravAcc != 0) {
-      Serial.println(nonGravAcc);
+    if (nonGravAcc != 0 && !yMovementBegun) {
+//      Serial.println(nonGravAcc);
 
       // If the last movement was within a second of this one AND our array isn't full
       if (millis() - generalMovementLastMillis < 1000) {
-        Serial.println("Related movement");
+//        Serial.println("Related movement");
 
         moveGeneral[generalMovementIndex] = nonGravAcc;
 
         generalMovementIndex++;
       }
       else {
-        Serial.println("UnRelated movement");
+//        Serial.println("UnRelated movement");
       }
 
       generalMovementLastMillis = millis();
