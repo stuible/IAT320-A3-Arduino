@@ -13,10 +13,6 @@ float accX[4] = {0, 0, 0, 0};
 float accY[4] = {0, 0, 0, 0};
 float accZ[4] = {0, 0, 0, 0};
 
-//Index and arrays to store previous historical acc. data for comparison
-float accPrevX[4] = {0, 0, 0, 0};
-float accPrevY[4] = {0, 0, 0, 0};
-float accPrevZ[4] = {0, 0, 0, 0};
 float accThreshold = 10;
 float yThreshold = 4;
 
@@ -72,10 +68,6 @@ void loop(void)
 
 //      Serial.print(raw);
 
-  // Transfer current current data into another array so it can be compared after the current array once full
-  accPrevX[historyIndex] = accX[historyIndex];
-  accPrevY[historyIndex] = accY[historyIndex];
-  accPrevZ[historyIndex] = accZ[historyIndex];
 
   // Update current index with current acceleration data
   accX[historyIndex] = accEvent.acceleration.x;
@@ -88,10 +80,6 @@ void loop(void)
   else {
     String json = ""; // String that will contain json data for later trandsport over bluetooth
     historyIndex = 0; // Reset history index
-
-    float xPrevAvg = arrayAverage(accPrevX, 4);
-    float yPrevAvg = arrayAverage(accPrevY, 4);
-    float zPrevAvg = arrayAverage(accPrevZ, 4);
 
     float xAvg = arrayAverage(accX, 4);
     float yAvg = arrayAverage(accY, 4);
